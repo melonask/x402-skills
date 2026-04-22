@@ -9,7 +9,7 @@ This guide covers using `x402-reqwest` to build Rust clients that automatically 
 x402-reqwest = { version = "1.0", features = ["json"] }
 x402-chain-eip155 = { version = "1.0", features = ["client"] }
 x402-chain-solana = { version = "1.0", features = ["client"] }
-alloy-signer-local = "0.8"
+alloy-signer-local = "1.4"
 reqwest = { version = "0.13", features = ["json"] }
 tokio = { version = "1", features = ["full"] }
 ```

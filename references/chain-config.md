@@ -43,7 +43,7 @@ The `USDC` struct (from `x402_types::networks`) provides pre-configured token de
 
 ```rust
 use x402_types::networks::USDC;
-use x402_chain_eip155::V2Eip155Exact;
+use x402_chain_eip155::{V2Eip155Exact, KnownNetworkEip155};
 
 // Get USDC deployment info for a specific network
 let usdc_base = USDC::base();           // Returns Eip155TokenDeployment for Base Mainnet
@@ -80,7 +80,7 @@ let price_tag = V2SolanaExact::price_tag(
 The protocol supports **any ERC-20 token**. Pass the token contract address directly:
 
 ```rust
-use x402_chain_eip155::V2Eip155Exact;
+use x402_chain_eip155::{V2Eip155Exact, KnownNetworkEip155};
 use alloy_primitives::address;
 
 // Accept DAI payments on Base Sepolia

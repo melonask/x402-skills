@@ -1,8 +1,8 @@
-# x402 — HTTP 402 Payment Protocol Skill
+# x402-skills
 
 A comprehensive skill for the LLM that enables building solutions with the [x402 protocol](https://www.x402.org) and the [x402-rs](https://github.com/x402-rs/x402-rs) Rust library. The x402 protocol activates the long-dormant HTTP `402 Payment Required` status code to enable blockchain payments directly through HTTP — the client never touches the blockchain, and the facilitator handles all on-chain operations.
 
-## What This Skill Enables
+## Overview
 
 With this skill, the LLM developer can:
 
@@ -13,7 +13,13 @@ With this skill, the LLM developer can:
 - **Support smart wallets** — Handle EOA, EIP-1271 (deployed smart wallets), and EIP-6492 (counterfactual wallets) seamlessly.
 - **Work with any token** — Not limited to USDC. Any ERC-20 token, SPL token, or native coin can be used as payment.
 
-## Skill Structure
+## Installation
+
+```bash
+npx skills add melonask/x402-skills
+```
+
+## File Structure
 
 ```
 x402/
@@ -51,7 +57,7 @@ The skill uses **progressive disclosure**: the `SKILL.md` main file stays concis
 
 ```rust
 use x402_axum::X402Middleware;
-use x402_chain_eip155::V2Eip155Exact;
+use x402_chain_eip155::{V2Eip155Exact, KnownNetworkEip155};
 use x402_types::networks::USDC;
 
 let x402 = X402Middleware::new("https://facilitator.x402.rs");

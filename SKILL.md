@@ -76,7 +76,7 @@ tokio = { version = "1", features = ["full"] }
 use alloy_primitives::address;
 use axum::{Router, routing::get, response::IntoResponse, http::StatusCode};
 use x402_axum::X402Middleware;
-use x402_chain_eip155::V2Eip155Exact;
+use x402_chain_eip155::{V2Eip155Exact, KnownNetworkEip155};
 use x402_types::networks::USDC;
 
 let x402 = X402Middleware::new("https://facilitator.x402.rs");
@@ -103,7 +103,7 @@ async fn handler() -> impl IntoResponse {
 [dependencies]
 x402-reqwest = { version = "1.0", features = ["json"] }
 x402-chain-eip155 = { version = "1.0", features = ["client"] }
-alloy-signer-local = "0.8"
+alloy-signer-local = "1.4"
 reqwest = { version = "0.13", features = ["json"] }
 tokio = { version = "1", features = ["full"] }
 ```
@@ -159,6 +159,9 @@ let client = Client::new().with_payments(x402_client).build();
 x402 supports **any ERC-20 token** (not just USDC). The `price_tag` method accepts any token contract address:
 
 ```rust
+use x402_chain_eip155::KnownNetworkEip155;
+use x402_types::networks::USDC;
+
 // USDC (convenience helper)
 USDC::base_sepolia().amount(10u64)
 
@@ -248,7 +251,7 @@ Compute price per-request based on headers, query params, or auth:
 ```rust
 x402.with_dynamic_price(|headers, uri, _base_url| {
     let has_discount = uri.query().map(|q| q.contains("discount")).unwrap_or(false);
-    let amount = if has_discount { 50 } else { 100 };
+    let amount = if has_discount { 50u64 } else { 100u64 };
     async move {
         vec![V2Eip155Exact::price_tag(
             address!("0x..."),
@@ -268,11 +271,11 @@ Accept payments on multiple chains simultaneously:
 x402
     .with_price_tag(V2Eip155Exact::price_tag(
         address!("0x..."),
-        USDC::base_sepolia().amount(10),
+        USDC::base_sepolia().amount(10u64),
     ))
     .with_price_tag(V2SolanaExact::price_tag(
         "EGBQqKn968sVv5cQh5Cr72pSTHfxsuzq7o7asqYB5uEV".to_string(),
-        USDC::solana().amount(10),
+        USDC::solana().amount(10u64),
     ))
 ```
 

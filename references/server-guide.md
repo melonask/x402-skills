@@ -29,7 +29,7 @@ The simplest way to protect a route is with a static price tag:
 use alloy_primitives::address;
 use axum::{Router, routing::get, response::IntoResponse, http::StatusCode};
 use x402_axum::X402Middleware;
-use x402_chain_eip155::V2Eip155Exact;
+use x402_chain_eip155::{V2Eip155Exact, KnownNetworkEip155};
 use x402_types::networks::USDC;
 
 let x402 = X402Middleware::new("https://facilitator.x402.rs");
@@ -84,7 +84,7 @@ x402.with_dynamic_price(|headers, uri, _base_url| {
     let has_discount = uri.query()
         .map(|q| q.contains("discount"))
         .unwrap_or(false);
-    let amount = if has_discount { 50 } else { 100 };
+    let amount = if has_discount { 50u64 } else { 100u64 };
     async move {
         vec![V2Eip155Exact::price_tag(
             address!("0x..."),
@@ -115,7 +115,7 @@ x402.with_dynamic_price(|headers, uri, _base_url| {
         } else {
             vec![V2Eip155Exact::price_tag(
                 address!("0x..."),
-                USDC::base_sepolia().amount(100),
+                USDC::base_sepolia().amount(100u64),
             )]
         }
     }
