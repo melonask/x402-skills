@@ -1,185 +1,274 @@
-# Known Issues in x402-rs SKILL.md
+# Known Issues with x402-rs SKILL.md (April 2026)
 
-Date: April 2026
+This file documents real-world compilation and runtime issues discovered while testing every code example from the `x402-rs` skill documentation against the latest published crates (`1.4.6`). All issues were reproduced and fixed in a production workspace using real dependencies (not mocked).
 
-This document records verified errors discovered while testing the x402-rs skill against real crates on crates.io, along with real-world fixes demonstrated in working test projects.
+**Environment:** `rustc 1.95.0`, `cargo 1.95.0`, Linux x86_64.  
+**Crates tested:** `x402-axum 1.4.6`, `x402-reqwest 1.4.6`, `x402-chain-eip155 1.4.6`, `x402-types 1.4.6`, `x402-facilitator-local 1.4.6` (published 2026-04-14).
 
 ---
 
-## Issue 1: `USDC::base_sepolia()` requires `KnownNetworkEip155` trait in scope
+## Issue 1: Server example missing `Router` type annotation
 
-**Status:** VERIFIED — crate `x402-chain-eip155` 1.4.6 on crates.io
+**Location:** `SKILL.md` lines 75–97, `references/server-guide.md` lines 24–44  
+**Severity:** Compilation error  
+**Status:** Fixed with explicit type in real project
 
-**Skill Error Locations:**
-
-- `SKILL.md` line 89, line 165, line 171, line 254, line 271
-- `references/server-guide.md` line 42, line 64, line 91, line 117, line 141, line 230
-- `references/chain-config.md` line 55, line 56, line 63
-- `README.md` line 64
-
-**Original (broken) code:**
-
+### The Bug
+The skill shows:
 ```rust
-use x402_types::networks::USDC;
-use x402_chain_eip155::V2Eip155Exact;
-
-let price_tag = V2Eip155Exact::price_tag(
-    address!("0x..."),
-    USDC::base_sepolia().amount(10u64),
+let app = Router::new().route(
+    "/paid-content",
+    get(handler).layer(
+        x402.with_price_tag(...)
+    ),
 );
 ```
-
-**Actual compiler error:**
-
+This fails because `Router::new()` returns `Router<S>` where `S` is the state type, and the chained `.route(...).layer(...)` doesn't allow inference. Compiler error:
 ```
-error[E0599]: no function or associated item named `base_sepolia` found for struct `USDC` in the current scope
-   = help: trait `KnownNetworkEip155` which provides `base_sepolia` is implemented but not in scope; perhaps you want to import it
+error[E0283]: type annotations needed for `Router<_>`
 ```
 
-**Root Cause:**
-`USDC` is a marker struct defined in `x402_types::networks`. The `base_sepolia()` method comes from `impl KnownNetworkEip155<Eip155TokenDeployment> for USDC` in `x402-chain-eip155`. Because `KnownNetworkEip155` is a generic trait, Rust requires it to be in scope to resolve the method on the concrete type.
-
-**Fix demonstrated in `/test-projects/server/src/main.rs`:**
-
+### The Real Fix
+Add an explicit `Router` type annotation:
 ```rust
-use x402_chain_eip155::{V2Eip155Exact, KnownNetworkEip155};
-use x402_types::networks::USDC;
-
-let price_tag = V2Eip155Exact::price_tag(
-    address!("0x..."),
-    USDC::base_sepolia().amount(10u64),
+let app: Router = Router::new().route(
+    "/paid-content",
+    get(handler).layer(
+        x402.with_price_tag(V2Eip155Exact::price_tag(
+            address!("0xBAc675C310721717Cd4A37F6cbeA1F081b1C2a07"),
+            USDC::base_sepolia().amount(10u64),
+        ))
+    ),
 );
 ```
+**Verified:** `cargo run` succeeds for `x402-production-server`.
 
 ---
 
-## Issue 2: `alloy-signer-local` version mismatch (skill says `0.8`, crate requires `1.4`)
+## Issue 2: Missing `KnownNetworkEip155` import for `USDC::base_sepolia()`
 
-**Status:** VERIFIED — crate `x402-chain-eip155` 1.4.6 on crates.io
+**Location:** `references/chain-config.md` lines 45–65 (and many server/client snippets)  
+**Severity:** Compilation error  
+**Status:** Fixed by adding the trait import
 
-**Skill Error Locations:**
-
-- `SKILL.md` line 107
-- `references/client-guide.md` line 12
-- `README.md` line 74
-
-**Original (broken) Cargo.toml:**
-
-```toml
-alloy-signer-local = "0.8"
+### The Bug
+Calling `USDC::base_sepolia()` or any `USDC::*` method fails unless the trait `KnownNetworkEip155` is in scope:
+```
+error[E0599]: no function or associated item named `base_sepolia` found for struct `USDC`
 ```
 
-**Actual compiler error:**
-
+### The Real Fix
+Always import:
+```rust
+use x402_chain_eip155::KnownNetworkEip155;
+use x402_types::networks::USDC;
 ```
-error: failed to select a version for `c-kzg`.
-... required by package `alloy-signer-local v0.8.0`
-package `c-kzg` links to the native library `ckzg`, but it conflicts with a previous package
-```
-
-**Root Cause:**
-`x402-chain-eip155` declares dependency `alloy-signer-local = "1.4"`. Using `0.8` pulls in an incompatible native-linking `c-kzg` version that conflicts with the `alloy` 1.4 dependency graph used by `x402-chain-eip155`.
-
-**Fix demonstrated in `/test-projects/client/Cargo.toml`:**
-
-```toml
-alloy-signer-local = "1.4"
-```
+**Verified:** Required in `x402-production-server` and `x402-production-e2e`.
 
 ---
 
-## Issue 3: Solana dependency ecosystem has transitive `spl-token-2022` compilation failure
+## Issue 3: `X402Middleware` config methods live on `X402LayerBuilder`, not `X402Middleware`
 
-**Status:** VERIFIED — crates.io as of April 2026
+**Location:** `SKILL.md` lines 295–300 (settle timing is correct, `.with_resource`/`.with_mime_type`/`.with_description` are not)  
+**Severity:** Compilation error  
+**Status:** Fixed – use `X402LayerBuilder` methods
 
-**Skill Error Locations:**
-
-- `SKILL.md` line 138 (`use solana_keypair::Keypair;`)
-- `SKILL.md` line 139 (`use solana_client::nonblocking::rpc_client::RpcClient;`)
-- `references/client-guide.md` line 72, line 94, line 95
-- `references/server-guide.md` line 135 (`use solana_pubkey::pubkey;`)
-
-**Actual compiler error:**
-
-```
-error[E0308]: mismatched types
-  --> spl-token-2022-10.0.0/src/extension/token_group/processor.rs
-   | check_update_authority(group_update_authority_info, &group.update_authority)?;
-   | expected `&OptionalNonZeroPubkey`, found `&MaybeNull<Pubkey>`
-```
-
-**Root Cause:**
-The Solana ecosystem crates (e.g., `solana-client`, `solana-keypair`, `solana-pubkey`) have version conflicts with `spl-token-2022` (transitive dependency of `x402-chain-solana`). The skill's snippet uses `solana_client::nonblocking::rpc_client::RpcClient` and `solana_keypair::Keypair`, but these paths and versions may not align with what `x402-chain-solana` compiled against. Specifically, `x402-chain-solana` 1.4.6 depends on `solana-sdk` 2.x series while `solana-client` 3.1/4.x pulls `spl-token-2022` 10.0.0 which is type-incompatible.
-
-**Workaround demonstrated:**
-Avoid mixing `x402-chain-solana` with loose `solana-client` / `solana-keypair` versions. Use exact Solana SDK versions from the `x402-chain-solana` dependency graph, OR gate Solana code behind feature flags in a workspace.
-
-A **minimal correct import** (without compiling the full Solana graph) is to use only the re-exported types from `x402-chain-solana` itself if available, or pin Solana crates to the versions locked by `x402-chain-solana`.
-
----
-
-## Issue 4: `settle_after_execution` / `settle_before_execution` return different types and require `Clone`
-
-**Status:** PARTIALLY VERIFIED — does not compile as chained methods in skill
-
-**Skill Error Locations:**
-
-- `SKILL.md` line 283–287
-- `references/server-guide.md` line 170–178
-
-**Original (problematic) code from skill:**
-
+### The Bug
+The skill shows:
 ```rust
 let x402 = X402Middleware::new("https://facilitator.x402.rs")
-    .settle_after_execution();
+    .with_base_url(Url::parse("https://api.example.com").unwrap())    // correct
+    .with_resource(Url::parse("https://api.example.com/premium").unwrap()) // NOT on X402Middleware
+    .with_description("Premium API access")                                // NOT on X402Middleware
+    .with_mime_type("application/json");                                 // NOT on X402Middleware
 ```
+These methods do not exist on `X402Middleware`; they exist only on `X402LayerBuilder`, which is returned by `with_price_tag(...)` or `with_dynamic_price(...)`.
 
-**Root Cause:**
-
-- `settle_after_execution` returns `Self` (which is `X402Middleware<F>`), but `with_price_tag` is defined on `X402Middleware<TFacilitator>` where `TFacilitator: Clone`.
-- If the user chains `.settle_after_execution()` before `.with_price_tag(...)`, the compiler may fail because `F` must satisfy `Clone`, which `Arc<FacilitatorClient>` does, but the builder flow in the skill implies you can call these on the same object after `with_price_tag`, which is impossible because `with_price_tag` returns `X402LayerBuilder`, not `X402Middleware`.
-- The **dynamic pricing example** in the skill is broken: it calls `x402.with_dynamic_price(...).with_description(...)` but `with_dynamic_price` returns `X402LayerBuilder`, and `with_description` is a method on `X402LayerBuilder` — correct. However, `with_price_tag` returns `X402LayerBuilder<StaticPriceTags<TPriceTag>, TFacilitator>`, and further `with_price_tag` is only available when `TPriceTag: Clone`.
-
-**Fix demonstrated in `/test-projects/dynamic-pricing/src/main.rs`:**
-Call `with_dynamic_price` on `X402Middleware` (which returns a builder) and then chain `with_description` and `with_mime_type` on the builder. This works.
+### The Real Fix
+Chain resource/description/mime type on the LayerBuilder:
+```rust
+let app: Router = Router::new().route(
+    "/custom-config",
+    get(handler).layer(
+        x402.with_price_tag(V2Eip155Exact::price_tag(
+            address!("..."),
+            USDC::base_sepolia().amount(10u64),
+        ))
+        .with_description("Premium API access".to_string())
+        .with_mime_type("application/json".to_string())
+    ),
+);
+```
+**Verified:** compiles successfully in `x402-production-server`.
 
 ---
 
-## Issue 5: `amount()` in dynamic pricing example requires explicit `u64` type due to `Into<u64>` bound
+## Issue 4: `price_tag` does NOT accept a plain `String` for amount
 
-**Status:** VERIFIED
+**Location:** `SKILL.md` lines 168–173, `references/server-guide.md` lines 71–76  
+**Severity:** Compilation error  
+**Status:** `price_tag` requires `DeployedTokenAmount`
 
-**Skill Error Locations:**
-
-- `SKILL.md` line 251 (dynamic pricing example)
-- `references/server-guide.md` line 87
-
-**Original (broken) code:**
-
+### The Bug
+The skill claims:
 ```rust
-let amount = if has_discount { 50 } else { 100 };
+V2Eip155Exact::price_tag(
+    address!("0xTokenContractAddress"),
+    "1000000".to_string(), // amount in smallest token unit
+)
 ```
-
-**Actual compiler error:**
-
+This produces:
 ```
-the trait bound `u64: From<i32>` is not satisfied
+error[E0308]: arguments to this function are incorrect
+expected `DeployedTokenAmount<Uint<256, 4>, Eip155TokenDeployment>`, found `String`
 ```
+The second argument must be a `DeployedTokenAmount`, obtained only from:
+- `USDC::base_sepolia().amount(1000000u64)`
+- `USDC::base_sepolia().parse("0.01").unwrap()`
 
-**Fix demonstrated in `/test-projects/dynamic-pricing/src/main.rs`:**
-
+### The Real Fix
+Use `amount()` or `parse()` on the `Eip155TokenDeployment` type from `USDC`:
 ```rust
-let amount = if has_discount { 50u64 } else { 100u64 };
+V2Eip155Exact::price_tag(
+    address!("0x..."),
+    USDC::base_sepolia().amount(1000000u64),
+)
 ```
+**Verified:** correct signature confirmed by inspecting `x402-chain-eip155/src/v2_eip155_exact/server.rs:44`.
 
 ---
 
-## Summary of Skill Fixes Applied
+## Issue 5: `PaymentSelector` trait has different signatures and `PaymentCandidate` fields are public
 
-| #   | File(s)                                    | Fix                                                                                                                            |
-| --- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| 1   | All code examples using `USDC::*`          | Add `use x402_chain_eip155::KnownNetworkEip155;`                                                                               |
-| 2   | `SKILL.md`, `client-guide.md`, `README.md` | Change `alloy-signer-local = "0.8"` to `alloy-signer-local = "1.4"`                                                            |
-| 3   | `SKILL.md`, `client-guide.md`              | Add note about Solana transitive dep conflicts and exact version pinning                                                       |
-| 4   | `SKILL.md`, `server-guide.md`              | Clarify that `settle_before_execution` / `settle_after_execution` are methods on `X402Middleware`, not on the returned builder |
-| 5   | `SKILL.md`, `server-guide.md`              | Use `50u64` / `100u64` in dynamic pricing examples                                                                             |
+**Location:** `references/client-guide.md` lines 147–173  
+**Severity:** Compilation error  
+**Status:** Fixed in production client
+
+### The Bugs
+1. `select` takes a lifetime: `fn select<'a>(&self, candidates: &'a [PaymentCandidate]) -> Option<&'a PaymentCandidate>` – the skill omits lifetimes.
+2. `amount` and `chain_id` are **public fields**, not methods. Calling `c.amount()` or `c.network()` fails:
+   ```
+   error[E0599]: no method named `amount` found for reference `&&PaymentCandidate`
+   error[E0599]: no method named `network` found for reference `&&PaymentCandidate`
+   ```
+
+### The Real Fix
+```rust
+struct CheapestSelector;
+impl PaymentSelector for CheapestSelector {
+    fn select<'a>(&self, candidates: &'a [PaymentCandidate]) -> Option<&'a PaymentCandidate> {
+        candidates.iter().min_by_key(|c| c.amount) // field, not method
+    }
+}
+
+struct ChainPreferenceSelector { preferred_chain: String }
+impl PaymentSelector for ChainPreferenceSelector {
+    fn select<'a>(&self, candidates: &'a [PaymentCandidate]) -> Option<&'a PaymentCandidate> {
+        candidates.iter()
+            .find(|c| c.chain_id.to_string().contains(&self.preferred_chain))
+            .or_else(|| candidates.first())
+    }
+}
+```
+**Verified:** all client tests pass in `x402-production-client`.
+
+---
+
+## Issue 6: `SchemeRegistry::build` signature differs from skill example
+
+**Location:** `references/facilitator-guide.md` lines 199–246  
+**Severity:** Compilation error  
+**Status:** Fixed in production facilitator
+
+### The Bugs
+1. `SchemeRegistry::build` is **not** fallible (returns `Self`, not `Result<Self, ...>`);
+2. It needs a `ChainRegistry<P>` where `P: ChainProviderOps` — using `()` will not satisfy this bound unless you provide a real provider like `Eip155ChainProvider`.
+3. `SchemeConfig::chains` is `ChainIdPattern`, parsed with `"eip155:*".parse()?`.
+4. `SchemeRegistry` has no `::new()`; use `Default::default()` for an empty registry, or `SchemeRegistry::build(...)` for a populated one.
+
+### The Real Fix (minimal compilation test)
+```rust
+use x402_types::chain::ChainRegistry;
+use x402_types::scheme::SchemeRegistry;
+use x402_chain_eip155::Eip155ChainProvider;
+
+let chain_registry: ChainRegistry<Eip155ChainProvider> = ChainRegistry::new(HashMap::new());
+let blueprints = SchemeBlueprints::new()
+    .and_register(V1Eip155Exact)
+    .and_register(V2Eip155Exact);
+let config: Vec<SchemeConfig> = vec![];
+let scheme_registry = SchemeRegistry::build(chain_registry, blueprints, &config);
+```
+**Verified:** `x402-production-facilitator` compiles.
+
+---
+
+## Issue 7: Solana dependency conflict breaks compilation
+
+**Location:** `SKILL.md` lines 131–153 (multi-chain with Solana)  
+**Severity:** Compilation error  
+**Status:** Confirmed upstream issue; workaround documented
+
+### The Bug
+Adding `x402-chain-solana` pulls `spl-token-2022 v10.0.0`, which has an incompatible API with `solana-native-token v0.1.0`:
+```
+error[E0308]: expected `&OptionalNonZeroPubkey`, found `&MaybeNull<Pubkey>`
+   --> spl-token-2022-10.0.0/src/extension/token_group/processor.rs
+```
+
+### The Real Fix
+The ecosystem conflict exists on crates.io as of April 2026. Workarounds:
+- Use the upstream GitHub repo directly (`git = "https://github.com/x402-rs/x402-rs"`) and its pinned `Cargo.lock`.
+- In standalone crates.io projects, omit Solana support and document the limitation.
+
+**Verified:** EVM-only multi-chain client works perfectly.
+
+---
+
+## Issue 8: Skill lists crate version `"1.0"` when actual latest is `1.4.6`
+
+**Location:** All Cargo.toml snippets across the skill  
+**Severity:** Non-breaking (semver compatible)  
+**Status:** Noted for accuracy
+
+The skill uses `"1.0"` which resolves to `1.4.6` because of semver compatibility. However, for documentation accuracy, the latest published versions as of April 2026 are:
+
+| Crate | Latest |
+|-------|--------|
+| `x402-axum` | `1.4.6` |
+| `x402-reqwest` | `1.4.6` |
+| `x402-chain-eip155` | `1.4.6` |
+| `x402-chain-solana` | `1.4.6` |
+| `x402-chain-aptos` | `1.4.6` (git-only) |
+| `x402-types` | `1.4.6` |
+| `x402-facilitator-local` | `1.4.6` |
+| `x402-facilitator` | not on crates.io |
+
+---
+
+## Verified Working Patterns (tested in production workspace)
+
+| Pattern | Crate / Feature | Status |
+|---------|----------------|--------|
+| Static pricing server | `x402-axum` + `x402-chain-eip155/server` | Works |
+| Dynamic pricing (`with_dynamic_price`) | `x402-axum` + `x402-chain-eip155/server` | Works |
+| Conditional free access (empty vec) | `x402-axum` | Works |
+| `settle_before_execution()` | `x402-axum` | Works |
+| `settle_after_execution()` | `x402-axum` | Works (default) |
+| `with_supported_cache_ttl` on middleware | `x402-axum` | Works |
+| `with_description`, `with_mime_type` on LayerBuilder | `x402-axum` | Works |
+| `USDC::base_sepolia().amount(u64)` | `x402-chain-eip155` + `KnownNetworkEip155` | Works |
+| `USDC::base_sepolia().parse("0.01")` | `x402-chain-eip155` + `KnownNetworkEip155` | Works |
+| `USDC::base()`, `polygon()`, `avalanche()`, `sei()`, `xdc()` etc. | `x402-chain-eip155` + `KnownNetworkEip155` | Works |
+| Single-chain EVM client | `x402-reqwest` + `x402-chain-eip155/client` | Works |
+| Multi-chain EVM client (V1 + V2) | `x402-reqwest` + `x402-chain-eip155/client` | Works |
+| Custom `PaymentSelector` implementation | `x402-reqwest` / `x402-types` | Works (with lifetime annotation + fields) |
+| FacilitatorLocal creation | `x402-facilitator-local` | Works |
+| `handlers::routes()` | `x402-facilitator-local` | Works |
+| Docker facilitator runtime | `ghcr.io/x402-rs/x402-facilitator:latest` | Works – tested live |
+| E2E: server returns 402 + `Payment-Required` header | Real facilitator over internet | Verified |
+| E2E: paying client signs and retries | Real facilitator over internet | Verified (rejected due to 0 USDC balance, which is expected) |
+
+---
+
+*All tests were executed in a real workspace with actual crate dependencies from crates.io, running real binaries that talk to the live public facilitator at `https://facilitator.x402.rs`.*
