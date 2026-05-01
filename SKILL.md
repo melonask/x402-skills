@@ -1,6 +1,6 @@
 ---
 name: x402
-description: "Comprehensive guide for building solutions with the x402-rs Rust library and the x402 HTTP 402 payment protocol. Use this skill whenever the user wants to: create API services that accept x402 payments and return results; build agents that automatically pay via the x402 protocol to access paid data; implement payment verification on their own facilitator; configure x402 facilitators for EVM/Solana/Aptos blockchains; use any ERC-20 token or native coin as payment (not just USDC); implement gasless payments via EIP-3009, Permit2, or EIP-2612; protect Axum routes behind blockchain micropayments; create reqwest clients that transparently handle x402 payments; or work with the x402 protocol V1 or V2 wire formats. Make sure to use this skill when the user mentions HTTP 402, x402, blockchain payments, crypto payments, micropayments over HTTP, pay-per-request APIs, or facilitator setup."
+description: "Comprehensive guide for building solutions with the x402-rs Rust library and the x402 HTTP 402 payment protocol. Use this skill whenever the user wants to: create API services that accept x402 payments and return results; build agents that automatically pay via the x402 protocol to access paid data; implement payment verification on their own facilitator; configure x402 facilitators for EVM/Solana/Aptos blockchains; use any ERC-20 token or native coin as payment (not just USDC); build custom payment schemes (like EIP-7702 delegation); implement gasless payments via EIP-3009, Permit2, or EIP-2612; protect Axum routes behind blockchain micropayments; create reqwest clients that transparently handle x402 payments; or work with the x402 protocol V1 or V2 wire formats. Make sure to use this skill when the user mentions HTTP 402, x402, blockchain payments, crypto payments, micropayments over HTTP, pay-per-request APIs, or facilitator setup."
 ---
 
 # x402 Protocol & x402-rs Development Guide
@@ -56,6 +56,7 @@ The user's task determines which guide to read next:
 - **Running a facilitator / verifying payments** -> Read `references/facilitator-guide.md`
 - **Chain-specific config, tokens, networks** -> Read `references/chain-config.md`
 - **V1 vs V2 differences, schemes, gasless internals** -> Read `references/protocol-details.md`
+- **Building custom payment schemes (e.g., EIP-7702)** -> Read `references/custom-scheme-guide.md`
 
 ## Minimal Working Examples
 
@@ -202,6 +203,10 @@ Both are supported simultaneously by x402-rs. Prefer V2 for new projects.
 | `V2AptosExact::price_tag()`  | Aptos  | V2       | exact  |
 | `V2Eip155Upto::price_tag()`  | EVM    | V2       | upto   |
 
+### Custom Schemes & Extensibility
+
+If built-in schemes like `exact` or `upto` don't fit, `x402-rs` allows you to implement custom schemes via the `X402SchemeId` and `X402SchemeFacilitator` traits. This is highly useful for implementing bleeding-edge blockchain patterns—like **EIP-7702 delegation**—where the scheme dictates unique signature payloads and Type 4 transaction settlements, while keeping the HTTP middleware layers unchanged.
+
 ## Installation Patterns
 
 ### Server (accept payments)
@@ -329,3 +334,4 @@ For detailed information on any topic, read the appropriate reference file:
 - `references/facilitator-guide.md` — Facilitator setup, configuration, custom facilitator implementation, scheme registry, OpenTelemetry, graceful shutdown
 - `references/chain-config.md` — Per-chain config (EVM, Solana, Aptos), all known networks, USDC addresses, RPC setup, feature flags, environment variables, `LiteralOrEnv`
 - `references/protocol-details.md` — V1 vs V2 wire format, EIP-3009 flow, Permit2 flow, EIP-2612 gas sponsoring, smart wallet support (EIP-1271/EIP-6492), `upto` scheme, custom scheme implementation
+- `references/custom-scheme-guide.md` — Creating custom schemes, extending the protocol, and full-stack EIP-7702 implementation.

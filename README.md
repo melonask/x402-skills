@@ -21,9 +21,9 @@ npx skills add melonask/x402-skills
 
 ## File Structure
 
-```
+```text
 x402/
-├── SKILL.md                          # Main entry point (328 lines)
+├── SKILL.md                          # Main entry point (336 lines)
 │   ├── Protocol overview & 3-actor diagram
 │   ├── Crate architecture table
 │   ├── Quick-start routing guide
@@ -38,7 +38,8 @@ x402/
     ├── client-guide.md                # Reqwest middleware — auto-paying agents (253 lines)
     ├── facilitator-guide.md           # Facilitator setup & custom builds (358 lines)
     ├── chain-config.md                # Networks, tokens, RPC, feature flags (250 lines)
-    └── protocol-details.md            # V1/V2, gasless stack, smart wallets (365 lines)
+    ├── protocol-details.md            # V1/V2, gasless stack, smart wallets (365 lines)
+    └── custom-scheme-guide.md         # Custom schemes & EIP-7702 implementation (150 lines)
 ```
 
 The skill uses **progressive disclosure**: the `SKILL.md` main file stays concise (under 500 lines) while detailed guides are organized into domain-specific reference files that are loaded on demand.
